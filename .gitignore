@@ -1,0 +1,15 @@
+.DS_Store
+*.env
+*.env.local
+.env.*
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+dist/
+build/
+*.zip
+*.tar.gz
+.netlify/

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Inference POC — Cloud LLM Chat</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="btn-icon" onclick="closeSettings()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Lambda Function URL <span class="required">*</span></label>
+          <input type="url" id="lambdaUrlInput" placeholder="https://xxxxxxxx.lambda-url.us-east-1.on.aws/" />
+          <span class="hint">Found in AWS Console → Lambda → Function URL tab</span>
+        </div>
+        <div class="form-group">
+          <label>AWS Region</label>
+          <select id="regionInput">
+            <option value="us-east-1">US East (N. Virginia) — us-east-1</option>
+            <option value="us-east-2">US East (Ohio) — us-east-2</option>
+            <option value="us-west-1">US West (N. California) — us-west-1</option>
+            <option value="us-west-2">US West (Oregon) — us-west-2</option>
+            <option value="eu-west-1">Europe (Ireland) — eu-west-1</option>
+            <option value="eu-central-1">Europe (Frankfurt) — eu-central-1</option>
+            <option value="ap-southeast-1">Asia Pacific (Singapore) — ap-southeast-1</option>
+            <option value="ap-northeast-1">Asia Pacific (Tokyo) — ap-northeast-1</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Theme</label>
+          <div class="theme-toggle">
+            <button class="theme-btn active" data-theme="dark">Dark</button>
+            <button class="theme-btn" data-theme="light">Light</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
+        <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Layout -->
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <defs>
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#8b5cf6"/>
+                <stop offset="100%" stop-color="#3b82f6"/>
+              </linearGradient>
+            </defs>
+            <circle cx="16" cy="16" r="15" fill="url(#logoGrad)" opacity="0.15" stroke="url(#logoGrad)" stroke-width="1.5"/>
+            <path d="M10 16 C10 12 13 9 16 9 C19 9 22 12 22 16 C22 20 19 23 16 23" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round" fill="none"/>
+            <circle cx="16" cy="16" r="3" fill="url(#logoGrad)"/>
+            <circle cx="10" cy="16" r="1.5" fill="#8b5cf6"/>
+          </svg>
+          <span class="logo-text">NeuralChat</span>
+        </div>
+        <button class="btn-icon sidebar-close" onclick="toggleSidebar()" title="Close sidebar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+      </div>
+
+      <button class="new-chat-btn" onclick="newConversation()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Chat
+      </button>
+
+      <!-- Model Selector -->
+      <div class="section-label">Model</div>
+      <div class="model-selector-container">
+        <div class="model-select-wrapper">
+          <select id="modelSelect" onchange="selectModel(this.value)">
+            <optgroup label="⚡ Tiny (Fastest)">
+              <option value="llama3.2:1b">Llama 3.2 1B — Fastest</option>
+              <option value="phi3:mini">Phi-3 Mini 3.8B — Efficient</option>
+            </optgroup>
+            <optgroup label="🔥 Small (Balanced)">
+              <option value="llama3.2:3b" selected>Llama 3.2 3B — Balanced</option>
+              <option value="gemma2:2b">Gemma 2 2B — Google</option>
+            </optgroup>
+            <optgroup label="🧠 Medium (Quality)">
+              <option value="mistral:7b">Mistral 7B — Popular</option>
+              <option value="llama3.1:8b">Llama 3.1 8B — Meta</option>
+              <option value="llava:7b">LLaVA 7B — Vision 👁️</option>
+            </optgroup>
+            <optgroup label="🚀 Large (Best Quality)">
+              <option value="llama3.1:70b">Llama 3.1 70B — Most Capable</option>
+              <option value="mixtral:8x7b">Mixtral 8x7B — MoE</option>
+            </optgroup>
+          </select>
+          <svg class="select-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="model-info-card" id="modelInfoCard">
+          <div class="model-info-row">
+            <span class="info-label">Size</span>
+            <span class="info-value" id="modelSize">2.0 GB</span>
+          </div>
+          <div class="model-info-row">
+            <span class="info-label">Instance</span>
+            <span class="info-value" id="modelInstance">t3.xlarge</span>
+          </div>
+          <div class="model-info-row">
+            <span class="info-label">Est. Time</span>
+            <span class="info-value" id="modelTime">3–5 min</span>
+          </div>
+          <div class="model-info-row">
+            <span class="info-label">Vision</span>
+            <span class="info-value" id="modelVision">No</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat History -->
+      <div class="section-label" style="margin-top: 16px;">History</div>
+      <div class="chat-history" id="chatHistory">
+        <div class="empty-history">No conversations yet</div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="sidebar-footer-btn" onclick="openSettings()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          Settings
+        </button>
+        <a class="sidebar-footer-btn" href="https://github.com" target="_blank">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.11.82-.26.82-.58v-2.03c-3.34.72-4.04-1.61-4.04-1.61-.54-1.38-1.33-1.75-1.33-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49 1 .11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.11-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02.005 2.04.14 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.65 1.66.25 2.88.12 3.18.77.84 1.23 1.91 1.23 3.22 0 4.61-2.81 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.21.7.82.58C20.57 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button class="btn-icon sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <span class="current-model-badge" id="currentModelBadge">Llama 3.2 3B</span>
+        </div>
+        <div class="top-bar-center">
+          <span class="app-title">NeuralChat — AI Inference POC</span>
+        </div>
+        <div class="top-bar-right">
+          <div class="connection-status" id="connectionStatus">
+            <span class="status-dot"></span>
+            <span class="status-text">Disconnected</span>
+          </div>
+          <button class="btn-icon" onclick="openSettings()" title="Settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Chat Area -->
+      <div class="chat-area" id="chatArea">
+        <!-- Welcome Screen -->
+        <div class="welcome-screen" id="welcomeScreen">
+          <div class="welcome-content">
+            <div class="welcome-logo">
+              <svg width="64" height="64" viewBox="0 0 32 32" fill="none">
+                <defs>
+                  <linearGradient id="wLogoGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#8b5cf6"/>
+                    <stop offset="100%" stop-color="#3b82f6"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="16" cy="16" r="15" fill="url(#wLogoGrad)" opacity="0.15" stroke="url(#wLogoGrad)" stroke-width="1.5"/>
+                <path d="M10 16 C10 12 13 9 16 9 C19 9 22 12 22 16 C22 20 19 23 16 23" stroke="url(#wLogoGrad)" stroke-width="2" stroke-linecap="round" fill="none"/>
+                <circle cx="16" cy="16" r="3" fill="url(#wLogoGrad)"/>
+                <circle cx="10" cy="16" r="1.5" fill="#8b5cf6"/>
+              </svg>
+            </div>
+            <h1>Welcome to NeuralChat</h1>
+            <p>AI inference powered by AWS Lambda + EC2. Select a model and start chatting.</p>
+            <div class="warning-banner" id="urlWarning" style="display:none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Lambda URL not configured. <button onclick="openSettings()">Click here to add it</button>
+            </div>
+            <div class="suggestion-grid">
+              <button class="suggestion-card" onclick="useSuggestion('Explain quantum computing in simple terms')">
+                <span class="suggestion-icon">🔬</span>
+                <span>Explain quantum computing</span>
+              </button>
+              <button class="suggestion-card" onclick="useSuggestion('Write a Python function to sort a list of dictionaries by a key')">
+                <span class="suggestion-icon">💻</span>
+                <span>Write Python code</span>
+              </button>
+              <button class="suggestion-card" onclick="useSuggestion('What are the key differences between REST and GraphQL APIs?')">
+                <span class="suggestion-icon">🌐</span>
+                <span>REST vs GraphQL</span>
+              </button>
+              <button class="suggestion-card" onclick="useSuggestion('Create a marketing tagline for a sustainable coffee brand')">
+                <span class="suggestion-icon">✨</span>
+                <span>Creative writing</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <!-- Messages -->
+        <div class="messages-container" id="messagesContainer"></div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="input-area">
+        <!-- Image Preview -->
+        <div class="image-preview-bar" id="imagePreviewBar" style="display:none;">
+          <div class="image-preview-inner">
+            <img id="imagePreviewImg" src="" alt="Preview" />
+            <div class="image-preview-info">
+              <span id="imagePreviewName">image.png</span>
+              <span id="imagePreviewSize">0 KB</span>
+            </div>
+            <button class="remove-image-btn" onclick="removeImage()" title="Remove image">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Input Box -->
+        <div class="input-box" id="inputBox">
+          <label class="upload-btn" for="imageUpload" title="Upload image">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <input type="file" id="imageUpload" accept="image/*" onchange="handleImageUpload(event)" style="display:none;" />
+          </label>
+          <textarea
+            id="promptInput"
+            placeholder="Message NeuralChat... (Shift+Enter for new line)"
+            rows="1"
+            onkeydown="handleKeydown(event)"
+            oninput="autoResize(this)"
+          ></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+        <div class="input-footer">
+          <span class="input-hint">NeuralChat can make mistakes. Powered by AWS Lambda + EC2 on-demand inference.</span>
+          <span class="char-count" id="charCount">0</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Loading Overlay for inference -->
+  <div class="inference-loader" id="inferenceLoader" style="display:none;">
+    <div class="loader-card">
+      <div class="loader-steps">
+        <div class="loader-step" id="step1">
+          <div class="step-icon spinning">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </div>
+          <div class="step-text">
+            <div class="step-label">Initializing Lambda</div>
+            <div class="step-detail">Receiving request...</div>
+          </div>
+          <div class="step-timer" id="step1Timer">0s</div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="loader-step" id="step2">
+          <div class="step-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div class="step-text">
+            <div class="step-label">Starting EC2 Instance</div>
+            <div class="step-detail">Spinning up from AMI...</div>
+          </div>
+          <div class="step-timer" id="step2Timer">—</div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="loader-step" id="step3">
+          <div class="step-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="step-text">
+            <div class="step-label">Server Ready</div>
+            <div class="step-detail">Waiting for inference server...</div>
+          </div>
+          <div class="step-timer" id="step3Timer">—</div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="loader-step" id="step4">
+          <div class="step-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div class="step-text">
+            <div class="step-label">Running Inference</div>
+            <div class="step-detail">Generating response...</div>
+          </div>
+          <div class="step-timer" id="step4Timer">—</div>
+        </div>
+      </div>
+      <div class="loader-total">
+        <span>Elapsed:</span>
+        <span class="loader-elapsed" id="loaderElapsed">0.0s</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

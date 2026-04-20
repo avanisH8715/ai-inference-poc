@@ -1,0 +1,3 @@
+# boto3 is included in the Lambda runtime — no need to bundle it.
+# urllib is part of Python stdlib — no extra deps needed.
+# If you add requests or other packages, list them here and zip with the function.
