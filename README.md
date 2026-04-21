@@ -46,6 +46,8 @@ Browser shows response + timing breakdown
 > One command deploys everything: security group, AMI, IAM role, Lambda, and Function URL.
 > No SSH, no manual steps, fully idempotent (safe to re-run).
 
+> 📘 **For a deeper walkthrough** of Lambda code, config, AMI creation, and request/response timing, see **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**.
+
 ```bash
 chmod +x deploy.sh
 ./deploy.sh
