@@ -35,9 +35,60 @@ Browser shows response + timing breakdown
 ## Prerequisites
 
 - AWS account with billing enabled
-- AWS CLI configured (`aws configure`)
-- `gh` CLI installed and authenticated (`gh auth login`)
-- Python 3.10+ (for local testing)
+- AWS CLI v2 configured (`aws configure`)
+- `python3` and `zip` installed locally
+- `gh` CLI installed and authenticated (`gh auth login`) — for GitHub Pages deploy only
+
+---
+
+## Quick Start — Automated Deployment
+
+> One command deploys everything: security group, AMI, IAM role, Lambda, and Function URL.
+> No SSH, no manual steps, fully idempotent (safe to re-run).
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+**What it does, in order:**
+
+| Step | Action | Time |
+|------|--------|------|
+| 1 | Creates security group (TCP 8000), reuses if it exists | ~5s |
+| 2 | Finds latest Ubuntu 22.04 AMI | ~5s |
+| 3 | Launches EC2 builder, runs full Ollama + model setup via user-data | ~2 min |
+| 4 | Polls `/health` every 20s until inference server is ready | ~15 min |
+| 5 | Snapshots EC2 into a reusable AMI, terminates the builder | ~10 min |
+| 6 | Creates IAM role with EC2 + CloudWatch permissions | ~20s |
+| 7 | Packages and creates (or updates) the Lambda function | ~30s |
+| 8 | Creates public Function URL with CORS | ~10s |
+
+**Total: ~30 min on first run. Subsequent runs skip the AMI step and finish in ~2 min.**
+
+**Optional env var overrides:**
+
+```bash
+# Different region
+REGION=us-west-2 ./deploy.sh
+
+# Add an EC2 key pair for SSH debugging during AMI build
+KEY_NAME=my-keypair ./deploy.sh
+
+# Larger instance for 7B+ models
+INSTANCE_TYPE=t3.2xlarge KEY_NAME=my-keypair ./deploy.sh
+```
+
+Once the script finishes, copy the **Function URL** printed at the end,
+open `index.html` → Settings → paste it → Save.
+
+---
+
+## Manual Setup Reference
+
+> The steps below explain each piece in detail.
+> Use these if you want to customise the deployment or debug individual stages.
+> For a fresh install, prefer `./deploy.sh` above.
 
 ---
 
