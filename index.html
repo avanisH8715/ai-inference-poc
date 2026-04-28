@@ -265,6 +265,15 @@
   <!-- Loading Overlay for inference -->
   <div class="inference-loader" id="inferenceLoader" style="display:none;">
     <div class="loader-card">
+      <div class="loader-eta-bar">
+        <div class="loader-eta-text">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Expected: <strong id="loaderEta">~3–5 min</strong>
+        </div>
+        <div class="loader-hint">Please keep this tab open</div>
+      </div>
       <div class="loader-steps">
         <div class="loader-step" id="step1">
           <div class="step-icon spinning">

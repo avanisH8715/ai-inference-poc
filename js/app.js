@@ -513,8 +513,14 @@ async function sendMessage() {
     const aiResponse = body.response || body.message || 'No response received';
     const timing = body.timing || null;
 
+    // Show real timings on each loader step briefly before hiding
+    applyRealTimings(timing);
+
     // Store assistant message
     state.messages.push({ role: 'assistant', content: aiResponse, timing });
+
+    // Brief pause so the user sees the real per-step timings populate
+    await new Promise(r => setTimeout(r, 700));
 
     // Render response
     appendAssistantMessage(aiResponse, timing);
@@ -689,26 +695,78 @@ function renderMarkdown(text) {
 // ---- Inference Loader ----
 let loaderTimerStart = null;
 let loaderTimerInterval = null;
+let stageTimers = [];
+
+// Per-model rough stage estimates (seconds): lambda init, EC2 boot, server ready, inference
+function getStageEstimates(modelId) {
+  const m = MODELS[modelId];
+  const group = m ? m.group : 'Small';
+  if (group === 'Tiny')   return { lambda: 5, ec2: 150, server: 20, inference: 15 };
+  if (group === 'Small')  return { lambda: 5, ec2: 150, server: 40, inference: 30 };
+  if (group === 'Medium') return { lambda: 5, ec2: 150, server: 90, inference: 90 };
+  if (group === 'Large')  return { lambda: 5, ec2: 180, server: 180, inference: 540 };
+  return { lambda: 5, ec2: 150, server: 60, inference: 30 };
+}
+
+function formatStepTime(secs) {
+  if (secs == null) return '—';
+  if (secs < 60) return Math.round(secs) + 's';
+  const m = Math.floor(secs / 60);
+  const s = Math.round(secs % 60);
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
 
 function showInferenceLoader() {
   const loader = document.getElementById('inferenceLoader');
   if (loader) loader.style.display = 'flex';
   loaderTimerStart = Date.now();
 
-  // Reset steps
+  // Reset all steps
   ['step1', 'step2', 'step3', 'step4'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) {
-      el.classList.remove('active', 'done');
-    }
+    if (el) el.classList.remove('active', 'done');
   });
   ['step1Timer', 'step2Timer', 'step3Timer', 'step4Timer'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.textContent = id === 'step1Timer' ? '0s' : '—';
   });
 
+  // Show ETA from estimates
+  const est = getStageEstimates(state.currentModel);
+  const totalEst = est.lambda + est.ec2 + est.server + est.inference;
+  const etaEl = document.getElementById('loaderEta');
+  if (etaEl) {
+    const lo = Math.round(totalEst / 60);
+    const hi = Math.ceil((totalEst * 1.4) / 60);
+    etaEl.textContent = `~${lo}–${hi} min`;
+  }
+
   // Activate step 1 immediately
   activateStep('step1');
+
+  // Schedule progressive step transitions based on estimates
+  stageTimers.forEach(t => clearTimeout(t));
+  stageTimers = [];
+  let cumulative = 0;
+
+  cumulative += est.lambda * 1000;
+  stageTimers.push(setTimeout(() => {
+    completeStep('step1', formatStepTime(est.lambda));
+    activateStep('step2');
+  }, cumulative));
+
+  cumulative += est.ec2 * 1000;
+  stageTimers.push(setTimeout(() => {
+    completeStep('step2', formatStepTime(est.ec2));
+    activateStep('step3');
+  }, cumulative));
+
+  cumulative += est.server * 1000;
+  stageTimers.push(setTimeout(() => {
+    completeStep('step3', formatStepTime(est.server));
+    activateStep('step4');
+  }, cumulative));
+  // Step 4 stays active until response arrives
 }
 
 function activateStep(stepId) {
@@ -732,7 +790,20 @@ function completeStep(stepId, timeValue) {
   }
 }
 
+// Populate real timings on each step (called when Lambda response arrives)
+function applyRealTimings(timing) {
+  if (!timing) return;
+  stageTimers.forEach(t => clearTimeout(t));
+  stageTimers = [];
+  completeStep('step1', '✓');
+  completeStep('step2', formatStepTime(timing.ec2_startup_seconds));
+  completeStep('step3', formatStepTime(timing.server_ready_seconds));
+  completeStep('step4', formatStepTime(timing.inference_seconds));
+}
+
 function hideInferenceLoader() {
+  stageTimers.forEach(t => clearTimeout(t));
+  stageTimers = [];
   const loader = document.getElementById('inferenceLoader');
   if (loader) loader.style.display = 'none';
   if (loaderTimerInterval) {
